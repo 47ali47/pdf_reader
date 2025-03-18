@@ -1,2 +1,9 @@
 pdf_env/
-
+*.pdf
+*.txt
+*.docx
+*.doc
+*.xls
+*.xlsx
+*.ppt
+*.pptx
