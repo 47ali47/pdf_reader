@@ -7,6 +7,8 @@ import io
 import re
 import string
 
+
+
 def process_text(text, num_letters=2):
     """Bold the first few letters of each word, excluding punctuation."""
     words = text.split()
