@@ -5,6 +5,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 import io
 import re
+import textwrap
 
 def process_text(text, num_letters=2):
     """Bold the first few letters of each word."""
@@ -26,6 +27,18 @@ def create_pdf_with_bold_text(input_path, output_path, num_letters=2):
     reader = PdfReader(input_path)
     writer = PdfWriter()
     
+    # Define page dimensions and margins
+    PAGE_WIDTH, PAGE_HEIGHT = letter
+    LEFT_MARGIN = 50
+    RIGHT_MARGIN = 50
+    TOP_MARGIN = 750
+    BOTTOM_MARGIN = 50
+    LINE_HEIGHT = 15
+    FONT_SIZE = 12
+    
+    # Calculate maximum line width
+    TEXT_WIDTH = PAGE_WIDTH - LEFT_MARGIN - RIGHT_MARGIN
+    
     # Process each page
     for page in reader.pages:
         # Extract text from the page
@@ -37,31 +50,87 @@ def create_pdf_with_bold_text(input_path, output_path, num_letters=2):
         # Create a new PDF page with the processed text
         packet = io.BytesIO()
         c = canvas.Canvas(packet, pagesize=letter)
+        c.setFont("Helvetica", FONT_SIZE)
         
-        # Set font
-        c.setFont("Helvetica", 12)
+        # Split text into lines that fit within margins
+        y = TOP_MARGIN
+        current_line = []
+        current_line_width = 0
         
-        # Write the processed text
-        y = 750  # Start from top of page
+        # Process each line
         for line in processed_text.split('\n'):
-            # Handle bold text
+            # Split line into segments while preserving bold tags
+            segments = []
             parts = re.split(r'(<b>.*?</b>)', line)
-            x = 50  # Start from left margin
             
             for part in parts:
+                if not part:
+                    continue
+                    
                 if part.startswith('<b>') and part.endswith('</b>'):
-                    # Bold text
-                    text = part[3:-4]  # Remove tags
-                    c.setFont("Helvetica-Bold", 12)
-                    c.drawString(x, y, text)
-                    x += c.stringWidth(text, "Helvetica-Bold", 12)
-                elif part:
-                    # Regular text
-                    c.setFont("Helvetica", 12)
-                    c.drawString(x, y, part)
-                    x += c.stringWidth(part, "Helvetica", 12)
+                    # Bold text segment
+                    text = part[3:-4]
+                    segments.append(('bold', text))
+                else:
+                    # Regular text - split into words
+                    words = part.split()
+                    for word in words:
+                        segments.append(('regular', word))
             
-            y -= 15  # Move to next line
+            # Process segments into lines
+            for i, (style, text) in enumerate(segments):
+                # Calculate word width
+                font = "Helvetica-Bold" if style == 'bold' else "Helvetica"
+                word_width = c.stringWidth(text, font, FONT_SIZE)
+                space_width = c.stringWidth(' ', "Helvetica", FONT_SIZE)
+                
+                # Check if we need to start a new line
+                if current_line and (current_line_width + word_width + space_width > TEXT_WIDTH):
+                    # Draw current line
+                    x = LEFT_MARGIN
+                    for j, (line_style, line_text) in enumerate(current_line):
+                        # Set appropriate font
+                        c.setFont("Helvetica-Bold" if line_style == 'bold' else "Helvetica", FONT_SIZE)
+                        # Draw the word
+                        c.drawString(x, y, line_text)
+                        # Move x position, adding space if not last word
+                        x += c.stringWidth(line_text, "Helvetica-Bold" if line_style == 'bold' else "Helvetica", FONT_SIZE)
+                        if j < len(current_line) - 1:  # Add space only between words
+                            x += space_width
+                            
+                    # Move to next line
+                    y -= LINE_HEIGHT
+                    if y < BOTTOM_MARGIN:
+                        c.showPage()
+                        c.setFont("Helvetica", FONT_SIZE)
+                        y = TOP_MARGIN
+                    
+                    # Start new line with current word
+                    current_line = [(style, text)]
+                    current_line_width = word_width
+                else:
+                    # Add word to current line
+                    current_line.append((style, text))
+                    current_line_width += word_width + (space_width if current_line else 0)
+            
+            # Draw remaining line if it exists
+            if current_line:
+                x = LEFT_MARGIN
+                for j, (line_style, line_text) in enumerate(current_line):
+                    c.setFont("Helvetica-Bold" if line_style == 'bold' else "Helvetica", FONT_SIZE)
+                    c.drawString(x, y, line_text)
+                    x += c.stringWidth(line_text, "Helvetica-Bold" if line_style == 'bold' else "Helvetica", FONT_SIZE)
+                    if j < len(current_line) - 1:  # Add space only between words
+                        x += space_width
+                
+                # Move to next line
+                y -= LINE_HEIGHT
+                if y < BOTTOM_MARGIN:
+                    c.showPage()
+                    c.setFont("Helvetica", FONT_SIZE)
+                    y = TOP_MARGIN
+                current_line = []
+                current_line_width = 0
         
         c.save()
         
